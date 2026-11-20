@@ -65,7 +65,6 @@ flutter run -d chrome --dart-define=DEMO_MODE=true
 
 | Role | Username | Password |
 |------|----------|----------|
-| Guard | `demo_guard` | `GuardDemo123!` |
 | Student | `demo_student` | `StudentDemo123!` |
 
 The offline preview uses local sample data and never sends requests to the

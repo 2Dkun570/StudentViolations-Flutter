@@ -19,18 +19,11 @@ void main() {
       expect(userByUsername!.role, UserRole.student);
     });
 
-    test('authenticates guard demo account by email and username', () {
-      final userByEmail = DemoMode.authenticate(
-        'guard@gmail.com',
-        'Password123!',
-      );
-      expect(userByEmail, isNotNull);
-      expect(userByEmail!.role, UserRole.guard);
-      expect(userByEmail.name, contains('Officer Ramirez'));
-
-      final userByUsername = DemoMode.authenticate('guard', 'Password123!');
-      expect(userByUsername, isNotNull);
-      expect(userByUsername!.role, UserRole.guard);
+    test('rejects removed guard demo credentials', () {
+      expect(DemoMode.authenticate('guard@gmail.com', 'Password123!'), isNull);
+      expect(DemoMode.authenticate('guard', 'Password123!'), isNull);
+      expect(DemoMode.authenticate('demo_guard', 'GuardDemo123!'), isNull);
+      expect(DemoMode.authenticate('demo_guard', 'StudentDemo123!'), isNull);
     });
 
     test('authenticates SAO demo account', () {
@@ -51,17 +44,16 @@ void main() {
       );
     });
 
-    test('preserves backward compatibility with legacy demo credentials', () {
-      final legacyStudent = DemoMode.authenticate(
-        'demo_student',
-        'StudentDemo123!',
-      );
-      expect(legacyStudent, isNotNull);
-      expect(legacyStudent!.role, UserRole.student);
-
-      final legacyGuard = DemoMode.authenticate('demo_guard', 'GuardDemo123!');
-      expect(legacyGuard, isNotNull);
-      expect(legacyGuard!.role, UserRole.guard);
-    });
+    test(
+      'preserves backward compatibility with legacy student credentials',
+      () {
+        final legacyStudent = DemoMode.authenticate(
+          'demo_student',
+          'StudentDemo123!',
+        );
+        expect(legacyStudent, isNotNull);
+        expect(legacyStudent!.role, UserRole.student);
+      },
+    );
   });
 }

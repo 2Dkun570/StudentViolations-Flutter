@@ -47,8 +47,7 @@ class AuthProvider with ChangeNotifier {
       }
 
       if (const bool.fromEnvironment('DEMO_MODE')) {
-        _error =
-            'Invalid demo credentials. Use student@gmail.com or guard@gmail.com.';
+        _error = 'Invalid demo credentials. Use student@gmail.com.';
         notifyListeners();
         return;
       }

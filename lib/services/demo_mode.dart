@@ -29,22 +29,8 @@ class DemoMode {
     status: 'Active',
   );
 
-  // Guard Demo Account
-  static const String guardEmail = 'guard@gmail.com';
-  static const String guardUsername = 'guard';
-  static final User guardUser = User(
-    id: 'demo-guard',
-    username: guardEmail,
-    password: '',
-    name: 'Officer Ramirez (Guard)',
-    role: UserRole.guard,
-    contactNumber: '09129876543',
-    status: 'Active',
-  );
-
   /// Authenticate against demo accounts.
-  /// Matches student and guard demo credentials.
-  /// Also preserves backward compatibility with legacy demo credentials.
+  /// Matches the student demo credentials and legacy student login.
   static User? authenticate(String identifier, String password) {
     final cleanId = identifier.trim().toLowerCase();
     final cleanPass = password.trim();
@@ -56,15 +42,6 @@ class DemoMode {
         (cleanPass == demoPassword || cleanPass == 'StudentDemo123!')) {
       _runtimeDemoActive = true;
       return studentUser;
-    }
-
-    // Guard Check
-    if ((cleanId == guardEmail ||
-            cleanId == guardUsername ||
-            cleanId == 'demo_guard') &&
-        (cleanPass == demoPassword || cleanPass == 'GuardDemo123!')) {
-      _runtimeDemoActive = true;
-      return guardUser;
     }
 
     return null;

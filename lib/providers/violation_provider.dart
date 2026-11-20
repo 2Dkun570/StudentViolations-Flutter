@@ -651,7 +651,6 @@ class ViolationProvider with ChangeNotifier {
           contactNumber: '09187654321',
           status: 'Active',
         ),
-        DemoMode.guardUser,
       ];
       notifyListeners();
       return;
