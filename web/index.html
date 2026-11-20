@@ -33,6 +33,42 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <script>
+    (() => {
+      let nextTextFieldId = 0;
+
+      const addTextFieldIdentity = (node) => {
+        if (!(node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)) {
+          return;
+        }
+
+        if (!node.closest('flt-text-editing-host')) {
+          return;
+        }
+
+        const label = node.getAttribute('aria-label')?.trim() || '';
+        if (!node.id) {
+          node.id = `flutter-text-field-${++nextTextFieldId}`;
+        }
+        if (!node.name) {
+          node.name = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || node.id;
+        }
+      };
+
+      const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          for (const node of mutation.addedNodes) {
+            if (node instanceof Element) {
+              addTextFieldIdentity(node);
+              node.querySelectorAll('input, textarea').forEach(addTextFieldIdentity);
+            }
+          }
+        }
+      });
+
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

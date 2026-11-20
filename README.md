@@ -56,12 +56,23 @@ A comprehensive Flutter application for managing student violations in education
 
 ## 🔑 Demo Credentials
 
+For an offline, read-only UI preview that does not require the API or database,
+run:
+
+```bash
+flutter run -d chrome --dart-define=DEMO_MODE=true
+```
+
 | Role | Username | Password |
 |------|----------|----------|
-| Guard | guard | guard123 |
-| Student | student | student123 |
-| SAO | sao | sao123 |
-| Guidance | guidance | guidance123 |
+| Guard | `demo_guard` | `GuardDemo123!` |
+| Student | `demo_student` | `StudentDemo123!` |
+
+The offline preview uses local sample data and never sends requests to the
+backend. For real backend accounts, run `sql/Seed_Demo_Accounts.sql` from the companion
+[StudentViolations.API](https://github.com/jmcarulasan-dot/StudentViolations.API)
+repository against its configured database first. Production users must not
+enable `DEMO_MODE`.
 
 ## 📱 App Screenshots & Features
 
@@ -124,6 +135,21 @@ Student Arrives → Guard Inspection → Violation Check
 - **Real-time Updates**: Instant status changes across roles
 
 ## 🔧 Configuration
+
+### API server
+
+The Flutter app requires the backend API to be running. For web, the default
+API URL is `http://localhost:5277`; for mobile, it is
+`http://10.131.40.11:5277`. Override either default at build/run time:
+
+```bash
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:5277
+```
+
+For Flutter web, configure the API's CORS policy to allow the app's local
+development origin. A browser `Failed to fetch` error usually means the API is
+unreachable or its CORS preflight was rejected; the Flutter client cannot
+configure the server's CORS policy.
 
 ### Database Setup
 The app uses SQLite with automatic initialization and seed data:

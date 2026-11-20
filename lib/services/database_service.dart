@@ -5,16 +5,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/violation.dart';
 import '../models/notification_model.dart';
+import 'api_config.dart';
 
 class DatabaseService {
-  static const String _baseUrl = 'http://10.131.40.11:5277';
+  static String? _sessionToken;
 
   static void initialize() {}
 
   // ── Token helpers ────────────────────────────────────────────────────────────
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('jwt_token');
+    return _sessionToken ?? prefs.getString('jwt_token');
   }
 
   static Future<void> _saveToken(String token) async {
@@ -28,6 +29,7 @@ class DatabaseService {
   }
 
   static Future<void> clearToken() async {
+    _sessionToken = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
     await prefs.remove('student_no');
@@ -51,14 +53,16 @@ class DatabaseService {
       if (fcmToken == null) return;
 
       await http.post(
-        Uri.parse('$_baseUrl/api/notifications/fcm-token'),
+        Uri.parse('${ApiConfig.baseUrl}/api/notifications/fcm-token'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $jwtToken',
         },
         body: jsonEncode({'FCMToken': fcmToken}),
       );
-    } catch (e) {}
+    } catch (e) {
+      // Intentionally ignore optional sync failures for the FCM token backend.
+    }
   }
 
   // ── AUTH ─────────────────────────────────────────────────────────────────────
@@ -66,45 +70,148 @@ class DatabaseService {
   // POST /api/auth/login
   static Future<Map<String, dynamic>?> login(
     String username,
-    String password,
-  ) async {
+    String password, {
+    bool rememberMe = true,
+  }) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/auth/login'),
+        Uri.parse('${ApiConfig.baseUrl}/api/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'username': username, 'password': password}),
       );
       final data = jsonDecode(response.body);
       if (response.statusCode == 200 && data['status'] == 200) {
-        await _saveToken(data['token']);
-        await _saveStudentNo('');
-        await _saveTokenToBackend();
-
-        final decodedToken = _decodeJwt(data['token']);
-        final name = decodedToken['name']?.toString() ?? username;
-        final id =
-            decodedToken['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier']
-                ?.toString() ??
-            '';
-        final studentNo = decodedToken['studentNo']?.toString() ?? '';
-        final roleStr = (data['role'] as String).toLowerCase();
-
-        return {
-          'user': User(
-            id: id,
-            username: username,
-            password: '',
-            name: name,
-            role: _parseRole(roleStr),
-            studentNo: studentNo,
-          ),
-        };
+        final flow = data['data'];
+        if (flow is! Map<String, dynamic>) {
+          throw const FormatException(
+            'The API returned an invalid login response.',
+          );
+        }
+        if (flow['token'] == null) {
+          return {
+            'authenticator': flow,
+            'message':
+                data['message'] ?? 'Authenticator verification required.',
+          };
+        }
+        return await _completeLogin(username, flow, rememberMe: rememberMe);
       }
       // return the API's actual message
       return {'error': data['message'] ?? 'Invalid username or password'};
     } catch (e) {
       throw Exception('Login failed: $e');
     }
+  }
+
+  static Future<Map<String, dynamic>> verifyAuthenticatorCode({
+    required String username,
+    required String challengeId,
+    required String code,
+    bool rememberMe = true,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/api/auth/mfa/verify'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'challengeId': challengeId, 'code': code}),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode != 200 || data['status'] != 200) {
+        return {
+          'error': data['message'] ?? 'Authenticator verification failed.',
+        };
+      }
+
+      final flow = data['data'];
+      if (flow is! Map<String, dynamic>) {
+        throw const FormatException(
+          'The API returned an invalid authenticator response.',
+        );
+      }
+      return await _completeLogin(username, flow, rememberMe: rememberMe);
+    } catch (e) {
+      throw Exception('Authenticator verification failed: $e');
+    }
+  }
+
+  // POST /api/auth/change-password
+  static Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final response = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/change-password'),
+      headers: await _authHeaders(),
+      body: jsonEncode({
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      }),
+    );
+
+    dynamic data;
+    if (response.body.trim().isNotEmpty) {
+      try {
+        data = jsonDecode(response.body);
+      } on FormatException {
+        if (response.statusCode >= 200 && response.statusCode < 300) return;
+        rethrow;
+      }
+    }
+
+    final apiStatus = data is Map ? data['status'] : null;
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        (apiStatus != null && apiStatus.toString() != '200')) {
+      final message = data is Map ? data['message']?.toString() : null;
+      throw Exception(message ?? 'Failed to change password.');
+    }
+  }
+
+  static Future<Map<String, dynamic>> _completeLogin(
+    String username,
+    Map<String, dynamic> flow, {
+    required bool rememberMe,
+  }) async {
+    final token = flow['token']?.toString();
+    if (token == null || token.isEmpty) {
+      throw const FormatException('The API did not return an access token.');
+    }
+
+    _sessionToken = token;
+    if (rememberMe) {
+      await _saveToken(token);
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('jwt_token');
+    }
+    final decodedToken = _decodeJwt(token);
+    final studentNo = decodedToken['studentNo']?.toString() ?? '';
+    if (rememberMe) {
+      await _saveStudentNo(studentNo);
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('student_no');
+    }
+    await _saveTokenToBackend();
+
+    final roleStr = (flow['role'] ?? '').toString().toLowerCase();
+    final user = User(
+      id:
+          decodedToken['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier']
+              ?.toString() ??
+          '',
+      username: username,
+      password: '',
+      name: decodedToken['name']?.toString() ?? username,
+      role: _parseRole(roleStr),
+      studentNo: studentNo,
+      token: token,
+    );
+
+    return {
+      'user': user,
+      'recoveryCodes': flow['recoveryCodes'] ?? const <String>[],
+    };
   }
 
   static Map<String, dynamic> _decodeJwt(String token) {
@@ -155,7 +262,7 @@ class DatabaseService {
           : firstName;
 
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/auth/register'),
+        Uri.parse('${ApiConfig.baseUrl}/api/auth/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'username': username,
@@ -210,7 +317,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/student/violations'),
+        Uri.parse('${ApiConfig.baseUrl}/api/student/violations'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -256,7 +363,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/student/profile'),
+        Uri.parse('${ApiConfig.baseUrl}/api/student/profile'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -272,7 +379,7 @@ class DatabaseService {
   static Future<void> uploadProfilePhoto(String base64Photo) async {
     final headers = await _authHeaders();
     final response = await http.put(
-      Uri.parse('$_baseUrl/api/student/profile/photo'),
+      Uri.parse('${ApiConfig.baseUrl}/api/student/profile/photo'),
       headers: headers,
       body: jsonEncode({'base64Photo': base64Photo}),
     );
@@ -286,7 +393,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/student/qrcode'),
+        Uri.parse('${ApiConfig.baseUrl}/api/student/qrcode'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -307,7 +414,9 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/student/violations/$violationId/appeal'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/api/student/violations/$violationId/appeal',
+        ),
         headers: headers,
         body: jsonEncode({'AppealText': appealText}),
       );
@@ -325,7 +434,9 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/guard/student/validate?studentNo=$studentNo'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/api/guard/student/validate?studentNo=$studentNo',
+        ),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -351,7 +462,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/guard/student/violation'),
+        Uri.parse('${ApiConfig.baseUrl}/api/guard/student/violation'),
         headers: headers,
         body: jsonEncode({
           'studentNo': violation.studentId,
@@ -390,7 +501,7 @@ class DatabaseService {
       final headers = await _authHeaders();
       final response = await http.get(
         Uri.parse(
-          '$_baseUrl/api/guard/violations/summary?StartDate=$startDate&EndDate=$endDate',
+          '${ApiConfig.baseUrl}/api/guard/violations/summary?StartDate=$startDate&EndDate=$endDate',
         ),
         headers: headers,
       );
@@ -415,7 +526,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/guard/students'),
+        Uri.parse('${ApiConfig.baseUrl}/api/guard/students'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -447,7 +558,9 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/guard/students/exist?studentNo=$studentNo'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/api/guard/students/exist?studentNo=$studentNo',
+        ),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -464,7 +577,9 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/guard/student/validate?studentNo=$studentNo'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/api/guard/student/validate?studentNo=$studentNo',
+        ),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -501,7 +616,7 @@ class DatabaseService {
       final headers = await _authHeaders();
       final response = await http.put(
         Uri.parse(
-          '$_baseUrl/api/sao/students/$studentNo/recommend-dismiss',
+          '${ApiConfig.baseUrl}/api/sao/students/$studentNo/recommend-dismiss',
         ),
         headers: headers,
       );
@@ -519,7 +634,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/sao/violations'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/violations'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -537,7 +652,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/sao/violations/by-status/$status'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/violations/by-status/$status'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -555,7 +670,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/sao/violations/summary'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/violations/summary'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -573,7 +688,9 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.put(
-        Uri.parse('$_baseUrl/api/sao/violations/$violationId/approve'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/api/sao/violations/$violationId/approve',
+        ),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -590,7 +707,9 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.put(
-        Uri.parse('$_baseUrl/api/sao/violations/$violationId/reject'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/api/sao/violations/$violationId/reject',
+        ),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -607,7 +726,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.delete(
-        Uri.parse('$_baseUrl/api/sao/violations/$violationId'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/violations/$violationId'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -628,7 +747,9 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.put(
-        Uri.parse('$_baseUrl/api/sao/violations/$violationId/appeal/review'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/api/sao/violations/$violationId/appeal/review',
+        ),
         headers: headers,
         body: jsonEncode({
           'AppealStatus': appealStatus,
@@ -647,14 +768,16 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/sao/violations/appeals'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/violations/appeals'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
       if (response.statusCode == 200 && data['status'] == 200) {
-        return List<Map<String, dynamic>>.from(data['data']);
+        return List<Map<String, dynamic>>.from(data['data'] ?? const []);
       }
-      return [];
+      throw Exception(
+        data['message'] ?? 'Failed to get appeals (${response.statusCode})',
+      );
     } catch (e) {
       throw Exception('Failed to get appeals: $e');
     }
@@ -667,7 +790,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/sao/students/$studentNo/report'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/students/$studentNo/report'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -685,7 +808,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.put(
-        Uri.parse('$_baseUrl/api/sao/students/$studentNo/dismiss'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/students/$studentNo/dismiss'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -700,7 +823,9 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.put(
-        Uri.parse('$_baseUrl/api/sao/students/$studentNo/cancel-dismiss'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/api/sao/students/$studentNo/cancel-dismiss',
+        ),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -714,7 +839,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/sao/students/pending-dismissal'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/students/pending-dismissal'),
         headers: headers,
       );
 
@@ -738,7 +863,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/sao/students/dismissed'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/students/dismissed'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -760,7 +885,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/sao/users'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/users'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -793,7 +918,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/sao/users/$userId'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/users/$userId'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -814,7 +939,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.put(
-        Uri.parse('$_baseUrl/api/sao/users/$userId'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/users/$userId'),
         headers: headers,
         body: jsonEncode(userData),
       );
@@ -832,7 +957,7 @@ class DatabaseService {
     try {
       final headers = await _authHeaders();
       final response = await http.delete(
-        Uri.parse('$_baseUrl/api/sao/users/$userId'),
+        Uri.parse('${ApiConfig.baseUrl}/api/sao/users/$userId'),
         headers: headers,
       );
       final data = jsonDecode(response.body);
@@ -849,7 +974,7 @@ class DatabaseService {
   static Future<List<NotificationModel>> getNotifications() async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/notifications'),
+        Uri.parse('${ApiConfig.baseUrl}/api/notifications'),
         headers: await _authHeaders(),
       );
       if (response.statusCode == 200) {
@@ -867,7 +992,7 @@ class DatabaseService {
   static Future<void> markNotificationAsRead(int id) async {
     try {
       await http.put(
-        Uri.parse('$_baseUrl/api/notifications/$id/read'),
+        Uri.parse('${ApiConfig.baseUrl}/api/notifications/$id/read'),
         headers: await _authHeaders(),
       );
     } catch (e) {
@@ -879,7 +1004,7 @@ class DatabaseService {
   static Future<void> markAllNotificationsAsRead() async {
     try {
       await http.put(
-        Uri.parse('$_baseUrl/api/notifications/read-all'),
+        Uri.parse('${ApiConfig.baseUrl}/api/notifications/read-all'),
         headers: await _authHeaders(),
       );
     } catch (e) {
@@ -915,7 +1040,8 @@ class DatabaseService {
       case 'student':
         return UserRole.student;
       case 'sao':
-        return UserRole.sao;      default:
+        return UserRole.sao;
+      default:
         return UserRole.student;
     }
   }
@@ -923,10 +1049,12 @@ class DatabaseService {
   static ViolationType _parseViolationType(String? type) {
     final t = (type ?? '').toLowerCase();
     if (t.contains('uniform')) return ViolationType.noUniform;
-    if (t.contains('piercing') || t.contains('earring'))
+    if (t.contains('piercing') || t.contains('earring')) {
       return ViolationType.piercing;
-    if (t.contains('hair') || t.contains('color'))
+    }
+    if (t.contains('hair') || t.contains('color')) {
       return ViolationType.coloredHair;
+    }
     return ViolationType.noId;
   }
 
@@ -970,6 +1098,22 @@ class DatabaseService {
       await approveViolation(violationId);
     } else if (status == ViolationStatus.cleared) {
       await rejectViolation(violationId);
+    }
+  }
+
+  static Future<void> updateStudentWarning(String studentNo) async {
+    try {
+      final headers = await _authHeaders();
+      final response = await http.put(
+        Uri.parse('${ApiConfig.baseUrl}/api/student/warn/$studentNo'),
+        headers: headers,
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode != 200 || data['status'] != 200) {
+        throw Exception(data['message'] ?? 'Failed to warn student');
+      }
+    } catch (e) {
+      throw Exception('Failed to warn student: $e');
     }
   }
 }

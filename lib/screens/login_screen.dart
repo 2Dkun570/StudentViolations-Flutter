@@ -1,10 +1,15 @@
+import 'dart:convert';
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/fcm_service.dart';
+import '../services/demo_mode.dart';
+import '../theme/app_theme.dart';
 
-const _red = Color(0xFFFD070C);
-const _navy = Color(0xFF0F136E);
+const _red = AppColors.red;
+const _navy = AppColors.navy;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen>
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _rememberMe = true;
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
@@ -51,39 +57,24 @@ class _LoginScreenState extends State<LoginScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // ── Background gradient ───────────────────────────────────────────
-          Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [_navy, Color(0xFF1A1F8F), Color(0xFF0A0D4E)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/aclc_campus_background.jpg',
+              key: const ValueKey('login-campus-background'),
+              fit: BoxFit.cover,
+              alignment: Alignment.centerRight,
             ),
           ),
-
-          // ── Decorative circles ────────────────────────────────────────────
-          Positioned(
-            top: -60,
-            right: -60,
-            child: _decorCircle(220, _red.withOpacity(0.12)),
-          ),
-          Positioned(
-            top: 80,
-            right: 30,
-            child: _decorCircle(80, _red.withOpacity(0.08)),
-          ),
-          Positioned(
-            bottom: -80,
-            left: -80,
-            child: _decorCircle(280, _red.withOpacity(0.10)),
-          ),
-          Positioned(
-            bottom: 120,
-            left: 20,
-            child: _decorCircle(60, Colors.white.withOpacity(0.04)),
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0x4D090C47), Color(0x80090C47)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ),
           ),
 
           // ── Main content ──────────────────────────────────────────────────
@@ -98,120 +89,142 @@ class _LoginScreenState extends State<LoginScreen>
                   opacity: _fadeAnim,
                   child: SlideTransition(
                     position: _slideAnim,
-                    child: Column(
-                      children: [
-                        // ── Header ────────────────────────────────────────
-                        _buildHeader(),
-                        const SizedBox(height: 28),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 440),
+                      child: Column(
+                        children: [
+                          _buildHeader(),
+                          const SizedBox(height: 28),
 
-                        // ── Card ──────────────────────────────────────────
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _navy.withOpacity(0.35),
-                                blurRadius: 40,
-                                offset: const Offset(0, 16),
+                          // ── Card ──────────────────────────────────────────
+                          Container(
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF173B5C,
+                              ).withValues(alpha: 0.38),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                width: 1.4,
                               ),
-                            ],
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(28.0),
-                            child: Form(
-                              key: _formKey,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Sign in to continue',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.black45,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _navy.withValues(alpha: 0.35),
+                                  blurRadius: 40,
+                                  offset: const Offset(0, 16),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(24),
+                              child: BackdropFilter(
+                                key: const ValueKey('login-glass-card'),
+                                filter: ImageFilter.blur(
+                                  sigmaX: 22,
+                                  sigmaY: 22,
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(28.0),
+                                    child: Form(
+                                      key: _formKey,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Login',
+                                            style: TextStyle(
+                                              fontSize: 32,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          const Text(
+                                            'Welcome back, please sign in to your account',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.white70,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 28),
+
+                                          // ── Username ──────────────────────────
+                                          _buildTextField(
+                                            controller: _usernameController,
+                                            label: 'Email or Username',
+                                            icon: Icons.person_outline_rounded,
+                                            validator: (v) =>
+                                                (v == null || v.isEmpty)
+                                                ? 'Please enter your email or username'
+                                                : null,
+                                          ),
+                                          const SizedBox(height: 16),
+
+                                          // ── Password ──────────────────────────
+                                          _buildTextField(
+                                            controller: _passwordController,
+                                            label: 'Password',
+                                            icon: Icons.lock_outline_rounded,
+                                            obscure: _obscurePassword,
+                                            suffixIcon: IconButton(
+                                              icon: Icon(
+                                                _obscurePassword
+                                                    ? Icons
+                                                          .visibility_off_outlined
+                                                    : Icons.visibility_outlined,
+                                                color: Colors.white70,
+                                                size: 20,
+                                              ),
+                                              onPressed: () => setState(
+                                                () => _obscurePassword =
+                                                    !_obscurePassword,
+                                              ),
+                                            ),
+                                            validator: (v) =>
+                                                (v == null || v.isEmpty)
+                                                ? 'Please enter your password'
+                                                : null,
+                                          ),
+                                          CheckboxListTile(
+                                            contentPadding: EdgeInsets.zero,
+                                            dense: true,
+                                            controlAffinity:
+                                                ListTileControlAffinity.leading,
+                                            activeColor: const Color(
+                                              0xFF78B8D1,
+                                            ),
+                                            checkColor: _navy,
+                                            title: const Text(
+                                              'Remember me',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            value: _rememberMe,
+                                            onChanged: (value) => setState(
+                                              () =>
+                                                  _rememberMe = value ?? false,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 20),
+
+                                          // ── Login Button ──────────────────────
+                                          _buildLoginButton(),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(height: 20),
-
-                                  // ── Username ──────────────────────────
-                                  _buildTextField(
-                                    controller: _usernameController,
-                                    label: 'Username',
-                                    icon: Icons.person_outline_rounded,
-                                    validator: (v) => (v == null || v.isEmpty)
-                                        ? 'Please enter your username'
-                                        : null,
-                                  ),
-                                  const SizedBox(height: 16),
-
-                                  // ── Password ──────────────────────────
-                                  _buildTextField(
-                                    controller: _passwordController,
-                                    label: 'Password',
-                                    icon: Icons.lock_outline_rounded,
-                                    obscure: _obscurePassword,
-                                    suffixIcon: IconButton(
-                                      icon: Icon(
-                                        _obscurePassword
-                                            ? Icons.visibility_off_outlined
-                                            : Icons.visibility_outlined,
-                                        color: Colors.black38,
-                                        size: 20,
-                                      ),
-                                      onPressed: () => setState(
-                                        () => _obscurePassword =
-                                            !_obscurePassword,
-                                      ),
-                                    ),
-                                    validator: (v) => (v == null || v.isEmpty)
-                                        ? 'Please enter your password'
-                                        : null,
-                                  ),
-                                  const SizedBox(height: 28),
-
-                                  // ── Login Button ──────────────────────
-                                  _buildLoginButton(),
-                                  const SizedBox(height: 16),
-
-                                  // ── Register Link ─────────────────────
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Text(
-                                        "Don't have an account?",
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.black54,
-                                        ),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => Navigator.of(
-                                          context,
-                                        ).pushNamed('/register'),
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: _navy,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Register',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 13,
-                                            decoration:
-                                                TextDecoration.underline,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -223,7 +236,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // ── Header ──────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Column(
       children: [
@@ -235,7 +247,7 @@ class _LoginScreenState extends State<LoginScreen>
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.2),
+                color: Colors.black.withValues(alpha: 0.2),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
@@ -244,7 +256,11 @@ class _LoginScreenState extends State<LoginScreen>
           child: ClipOval(
             child: Padding(
               padding: const EdgeInsets.all(8.0),
-              child: Image.asset('assets/images/ACLC.png', fit: BoxFit.contain),
+              child: Image.asset(
+                'assets/images/ACLC.png',
+                key: const ValueKey('login-aclc-logo'),
+                fit: BoxFit.contain,
+              ),
             ),
           ),
         ),
@@ -262,9 +278,9 @@ class _LoginScreenState extends State<LoginScreen>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: _red.withOpacity(0.18),
+            color: _red.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _red.withOpacity(0.35)),
+            border: Border.all(color: _red.withValues(alpha: 0.35)),
           ),
           child: const Text(
             'Student Violation System',
@@ -292,25 +308,25 @@ class _LoginScreenState extends State<LoginScreen>
     return TextFormField(
       controller: controller,
       obscureText: obscure,
-      style: const TextStyle(fontSize: 14, color: Colors.black87),
+      style: const TextStyle(fontSize: 14, color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(fontSize: 14, color: Colors.black45),
-        prefixIcon: Icon(icon, color: _navy, size: 20),
+        labelStyle: const TextStyle(fontSize: 14, color: Colors.white70),
+        prefixIcon: Icon(icon, color: Colors.white70, size: 20),
         suffixIcon: suffixIcon,
         filled: true,
-        fillColor: const Color(0xFFF7F8FC),
+        fillColor: Colors.white.withValues(alpha: 0.06),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFDDE1EE)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.65)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFDDE1EE)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.65)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _navy, width: 1.8),
+          borderSide: const BorderSide(color: Colors.white, width: 1.8),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -330,43 +346,44 @@ class _LoginScreenState extends State<LoginScreen>
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
         if (authProvider.isLoading) {
-          return const Center(child: CircularProgressIndicator(color: _navy));
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.white),
+          );
         }
-        return SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: _login,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _navy,
-              disabledBackgroundColor: Colors.grey.shade300,
-              foregroundColor: Colors.white,
-              elevation: 4,
-              shadowColor: _navy.withOpacity(0.4),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        return Container(
+          height: 56,
+          decoration: BoxDecoration(
+            color: _navy,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: _navy.withValues(alpha: 0.35),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
-            ),
-            child: const Text(
-              'LOGIN',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.4,
+            ],
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _login,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                shadowColor: Colors.transparent,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Text(
+                'Login',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
             ),
           ),
         );
       },
-    );
-  }
-
-  // ── Decorative circle ────────────────────────────────────────────────────────
-  Widget _decorCircle(double size, Color color) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
     );
   }
 
@@ -377,10 +394,23 @@ class _LoginScreenState extends State<LoginScreen>
       await authProvider.login(
         _usernameController.text,
         _passwordController.text,
+        rememberMe: _rememberMe,
       );
 
+      if (authProvider.pendingAuthenticator != null) {
+        final verified = await _showAuthenticatorDialog(authProvider);
+        if (!verified) return;
+      }
+
       if (authProvider.currentUser != null) {
-        await FCMService.registerTokenAfterLogin();
+        final recoveryCodes = authProvider.consumeRecoveryCodes();
+        if (recoveryCodes.isNotEmpty) {
+          await _showRecoveryCodes(recoveryCodes);
+        }
+        if (!mounted) return;
+        if (!DemoMode.enabled) {
+          await FCMService.registerTokenAfterLogin();
+        }
         if (mounted) Navigator.of(context).pushReplacementNamed('/dashboard');
       } else {
         if (mounted) {
@@ -398,5 +428,162 @@ class _LoginScreenState extends State<LoginScreen>
         }
       }
     }
+  }
+
+  Future<bool> _showAuthenticatorDialog(AuthProvider authProvider) async {
+    final flow = authProvider.pendingAuthenticator!;
+    final isSetup = flow['requiresAuthenticatorSetup'] == true;
+    final qrDataUri = flow['qrCodeDataUri']?.toString();
+    final manualKey = flow['manualEntryKey']?.toString();
+    final challengeCodeController = TextEditingController();
+    var submitting = false;
+    String? dialogError;
+
+    final verified = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Future<void> submitCode() async {
+            final code = challengeCodeController.text.trim();
+            if (code.isEmpty) {
+              setDialogState(
+                () => dialogError = 'Enter an authenticator or recovery code.',
+              );
+              return;
+            }
+
+            setDialogState(() {
+              dialogError = null;
+              submitting = true;
+            });
+            await authProvider.verifyAuthenticatorCode(code);
+            if (!dialogContext.mounted) return;
+            if (authProvider.currentUser != null) {
+              Navigator.of(dialogContext).pop(true);
+            } else {
+              setDialogState(() {
+                dialogError =
+                    authProvider.error ?? 'Authenticator verification failed.';
+                submitting = false;
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: Text(
+              isSetup ? 'Set up authenticator' : 'Verify sign-in',
+              style: const TextStyle(color: _navy, fontWeight: FontWeight.w700),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isSetup
+                        ? 'Scan this QR code with an authenticator app, then enter the generated code.'
+                        : 'Enter the current code from your authenticator app. You may also use a recovery code.',
+                  ),
+                  if (isSetup && qrDataUri != null) ...[
+                    const SizedBox(height: 16),
+                    Image.memory(
+                      base64Decode(
+                        qrDataUri.substring(qrDataUri.indexOf(',') + 1),
+                      ),
+                      width: 180,
+                      height: 180,
+                      errorBuilder: (_, _, _) => const Text(
+                        'Could not display the QR code. Use the manual key below.',
+                      ),
+                    ),
+                  ],
+                  if (isSetup && manualKey != null) ...[
+                    const SizedBox(height: 12),
+                    const Text('Manual setup key'),
+                    SelectableText(
+                      manualKey,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: challengeCodeController,
+                    autofocus: true,
+                    textInputAction: TextInputAction.done,
+                    decoration: const InputDecoration(
+                      labelText: 'Authenticator or recovery code',
+                      border: OutlineInputBorder(),
+                    ),
+                    onSubmitted: (_) => submitCode(),
+                  ),
+                  if (dialogError != null) ...[
+                    const SizedBox(height: 10),
+                    Text(dialogError!, style: const TextStyle(color: _red)),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: submitting
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: submitting ? null : submitCode,
+                style: ElevatedButton.styleFrom(backgroundColor: _navy),
+                child: submitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Verify'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    challengeCodeController.dispose();
+    return verified == true;
+  }
+
+  Future<void> _showRecoveryCodes(List<String> codes) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Save your recovery codes'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'These codes can each be used once if you lose access to your authenticator. Save them somewhere safe.',
+              ),
+              const SizedBox(height: 12),
+              for (final code in codes)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: SelectableText(code),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
   }
 }

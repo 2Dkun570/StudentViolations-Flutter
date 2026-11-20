@@ -1,18 +1,19 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/violation_provider.dart';
+import 'providers/theme_mode_provider.dart';
 import 'services/database_service.dart';
 import 'screens/login_screen.dart';
-import 'screens/register_screen.dart';
 import 'screens/guard_dashboard.dart';
 import 'screens/student_dashboard.dart';
-import 'screens/sao_dashboard.dart';
 import 'models/user.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'services/fcm_service.dart';
+import 'theme/app_theme.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -22,21 +23,27 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   DatabaseService.initialize();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  await FCMService.initialize();
+
+  if (!kIsWeb) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    await FCMService.initialize();
+  }
+
   runApp(const MyApp());
 }
 
 // ── Official ACLC College of Mandaue Brand Colors ─────────────────────────────
 class ACLCColors {
-  static const red = Color(0xFFFD070C);
-  static const navy = Color(0xFF0F136E);
-  static const navyLight = Color(0xFF1A1F8F);
-  static const redDark = Color(0xFFB80004);
-  static const white = Colors.white;
-  static const gray = Color(0xFFF5F7FA);
-  static const cardBg = Color(0xFFFFFFFF);
+  static const red = AppColors.red;
+  static const navy = AppColors.navy;
+  static const navyLight = AppColors.navyLight;
+  static const redDark = AppColors.redDark;
+  static const white = AppColors.surface;
+  static const gray = AppColors.background;
+  static const cardBg = AppColors.surface;
 }
 
 class MyApp extends StatelessWidget {
@@ -48,183 +55,21 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ViolationProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeModeProvider()..load()),
       ],
-      child: MaterialApp(
-        title: 'ACLC Student Violation System',
-        debugShowCheckedModeBanner: false,
-        home: const SplashScreen(),
-        routes: {
-          '/login': (context) => const LoginScreen(),
-          '/register': (context) => const RegisterScreen(),
-          '/dashboard': (context) => const DashboardWrapper(),
-        },
-        theme: ThemeData(
-          useMaterial3: true,
-
-          colorScheme: const ColorScheme(
-            brightness: Brightness.light,
-            primary: ACLCColors.navy,
-            onPrimary: Colors.white,
-            secondary: ACLCColors.navy,
-            onSecondary: Colors.white,
-            error: ACLCColors.red,
-            onError: Colors.white,
-            surface: ACLCColors.cardBg,
-            onSurface: Colors.black87,
-            background: ACLCColors.gray,
-            onBackground: Colors.black87,
-          ),
-
-          scaffoldBackgroundColor: ACLCColors.gray,
-
-          appBarTheme: const AppBarTheme(
-            centerTitle: true,
-            elevation: 3,
-            backgroundColor: ACLCColors.navy,
-            foregroundColor: Colors.white,
-            titleTextStyle: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              letterSpacing: 0.5,
-            ),
-            shadowColor: ACLCColors.navy,
-          ),
-
-          cardTheme: CardThemeData(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            color: ACLCColors.cardBg,
-            surfaceTintColor: ACLCColors.cardBg,
-            shadowColor: ACLCColors.navy.withOpacity(0.15),
-          ),
-
-          elevatedButtonTheme: ElevatedButtonThemeData(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: ACLCColors.navy,
-              foregroundColor: Colors.white,
-              elevation: 3,
-              shadowColor: ACLCColors.navy.withOpacity(0.4),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              textStyle: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
-
-          textButtonTheme: TextButtonThemeData(
-            style: TextButton.styleFrom(
-              foregroundColor: ACLCColors.navy,
-              textStyle: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-
-          outlinedButtonTheme: OutlinedButtonThemeData(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: ACLCColors.navy,
-              side: const BorderSide(color: ACLCColors.navy, width: 1.5),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-
-          inputDecorationTheme: InputDecorationTheme(
-            filled: true,
-            fillColor: const Color(0xFFF7F8FC),
-            labelStyle: const TextStyle(color: Colors.black54, fontSize: 14),
-            prefixIconColor: ACLCColors.navy,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFDDE1EE)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFDDE1EE)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: ACLCColors.navy, width: 1.8),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: ACLCColors.red, width: 1.5),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
-          ),
-
-          chipTheme: ChipThemeData(
-            backgroundColor: Colors.grey.shade100,
-            selectedColor: ACLCColors.navy.withOpacity(0.15),
-            labelStyle: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: ACLCColors.navy,
-            ),
-            side: const BorderSide(color: ACLCColors.navy, width: 1),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-
-          floatingActionButtonTheme: const FloatingActionButtonThemeData(
-            backgroundColor: ACLCColors.navy,
-            foregroundColor: Colors.white,
-            elevation: 4,
-          ),
-
-          dividerTheme: DividerThemeData(
-            color: Colors.grey.shade200,
-            thickness: 1,
-          ),
-
-          snackBarTheme: SnackBarThemeData(
-            backgroundColor: ACLCColors.navy,
-            contentTextStyle: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-            ),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-
-          textTheme: const TextTheme(
-            bodyMedium: TextStyle(color: Colors.black87, fontSize: 14),
-            bodySmall: TextStyle(color: Colors.black54, fontSize: 12),
-            titleLarge: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: ACLCColors.navy,
-            ),
-            titleMedium: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: ACLCColors.navy,
-            ),
-            titleSmall: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: ACLCColors.navy,
-            ),
-            labelLarge: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              letterSpacing: 0.8,
-            ),
-          ),
+      child: Consumer<ThemeModeProvider>(
+        builder: (context, themeModeProvider, _) => MaterialApp(
+          title: 'ACLC Student Violation System',
+          debugShowCheckedModeBanner: false,
+          home: const SplashScreen(),
+          routes: {
+            '/login': (context) => const LoginScreen(),
+            '/dashboard': (context) => const DashboardWrapper(),
+          },
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeModeProvider.themeMode,
+          themeAnimationDuration: Duration.zero,
         ),
       ),
     );
@@ -298,8 +143,6 @@ class DashboardWrapper extends StatelessWidget {
           case UserRole.student:
             return const StudentDashboard();
           case UserRole.sao:
-            return const SAODashboard();
-          default:
             return const LoginScreen();
         }
       },

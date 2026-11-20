@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'api_config.dart';
 
 final FlutterLocalNotificationsPlugin _localNotifications =
     FlutterLocalNotificationsPlugin();
@@ -54,8 +56,6 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 // MAIN SERVICE CLASS
 class FCMService {
-  static const String _baseUrl = 'http://10.131.40.11:5277';
-
   static Future<void> initialize() async {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
@@ -113,15 +113,15 @@ class FCMService {
 
   static Future<void> _saveTokenToBackend() async {
     try {
-      print("=== _saveTokenToBackend CALLED ===");
+      debugPrint("=== _saveTokenToBackend CALLED ===");
       final token = await FirebaseMessaging.instance.getToken();
-      print("=== FCM TOKEN: $token ===");
+      debugPrint("=== FCM TOKEN: $token ===");
 
       if (token != null) {
         await _sendTokenToBackend(token);
       }
     } catch (e) {
-      print('FCM token error: $e');
+      debugPrint('FCM token error: $e');
     }
   }
 
@@ -131,12 +131,12 @@ class FCMService {
       final jwtToken = prefs.getString('jwt_token');
 
       if (jwtToken == null) {
-        print("Cannot save token: User not logged in (JWT missing)");
+        debugPrint("Cannot save token: User not logged in (JWT missing)");
         return;
       }
 
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/notifications/fcm-token'),
+        Uri.parse('${ApiConfig.baseUrl}/api/notifications/fcm-token'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $jwtToken',
@@ -145,12 +145,12 @@ class FCMService {
       );
 
       if (response.statusCode == 200) {
-        print(" Token saved to backend successfully!");
+        debugPrint(" Token saved to backend successfully!");
       } else {
-        print(" Failed to save token. Status: ${response.statusCode}");
+        debugPrint(" Failed to save token. Status: ${response.statusCode}");
       }
     } catch (e) {
-      print('Failed to send FCM token to backend: $e');
+      debugPrint('Failed to send FCM token to backend: $e');
     }
   }
 
